@@ -27,46 +27,46 @@ class CronCommand extends CConsoleCommand
 	}
 	
 	public function actionIndex(){
-$start = $this->getMicrotime();
+		$start = $this->getMicrotime();
 
-$now = new DateTime('now', new DateTimeZone('GMT'));
-$now = $now->format("Y-m-d H:i:s");
+		$now = new DateTime('now', new DateTimeZone('GMT'));
+		$now = $now->format("Y-m-d H:i:s");
 
-$jobs = CronJob::model()->findAll('execute_after <:now AND executed_at IS NULL ORDER BY id ASC', array(':now'=>$now));
+		$jobs = CronJob::model()->findAll('execute_after <:now AND executed_at IS NULL ORDER BY id ASC', array(':now'=>$now));
 
 
-for($i=0;$i<count($jobs); $i++){
-	$job = $jobs[$i];
-	echo "Processing Job " . $job->id . "\r\n";
-	
-	if(method_exists($this, $job->action)){
-		$result = $this->{$job->action}($job->parameters);
-		
-		if($result === false){
-			// do nothing, let the next cycle pick it up
-			continue;
-		}else{
-			$executed_at = new DateTime('now', new DateTimeZone('GMT'));
-			$job->succeeded = $result['succeeded'] ? 1 : 0;
-			$job->execution_result = array_key_exists('execution_result', $result) ? $result['execution_result'] : "";
-			$job->executed_at = $executed_at->format('Y-m-d H:i:s');
+		for($i=0;$i<count($jobs); $i++){
+			$job = $jobs[$i];
+			echo "Processing Job " . $job->id . "\r\n";
 			
-			$job->save();
+			if(method_exists($this, $job->action)){
+				$result = $this->{$job->action}($job->parameters);
+				
+				if($result === false){
+					// do nothing, let the next cycle pick it up
+					continue;
+				}else{
+					$executed_at = new DateTime('now', new DateTimeZone('GMT'));
+					$job->succeeded = $result['succeeded'] ? 1 : 0;
+					$job->execution_result = array_key_exists('execution_result', $result) ? $result['execution_result'] : "";
+					$job->executed_at = $executed_at->format('Y-m-d H:i:s');
+					
+					$job->save();
+				}
+			}else{
+				$executed_at = new DateTime('now', new DateTimeZone('GMT'));
+				$job->executed_at = $executed_at->format('Y-m-d H:i:s');
+				$job->succeeded = 0;
+				$job->execution_result = 'Action does not exist.';
+				$job->save();
+			}
+			
+			// if, God forbid, this script ever run longer than 9 minutes, abort the loop.
+			// If you don't heroku will kill the script after 10 (cron runs every 10 minutes).
+			// I'd rather end it myself cleanly and let the next iteration pick up whatever is
+			// left to be processed.
+			if($this->totalTime($start) >= (9*60)) break;
 		}
-	}else{
-		$executed_at = new DateTime('now', new DateTimeZone('GMT'));
-		$job->executed_at = $executed_at->format('Y-m-d H:i:s');
-		$job->succeeded = 0;
-		$job->execution_result = 'Action does not exist.';
-		$job->save();
-	}
-	
-	// if, God forbid, this script ever run longer than 9 minutes, abort the loop.
-	// If you don't heroku will kill the script after 10 (cron runs every 10 minutes).
-	// I'd rather end it myself cleanly and let the next iteration pick up whatever is
-	// left to be processed.
-	if($this->totalTime($start) >= (9*60)) break;
-}
 	}	
 	
 	public function testJob($params){
